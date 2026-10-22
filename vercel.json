@@ -1,0 +1,9 @@
+{
+  "crons": [
+    { "path": "/api/cron/generate-spp", "schedule": "5 0 1 * *" },
+    { "path": "/api/cron/generate-honor", "schedule": "15 0 1 * *" },
+    { "path": "/api/cron/reminder", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/overdue", "schedule": "10 0 * * *" },
+    { "path": "/api/cron/recurring", "schedule": "0 7 * * *" }
+  ]
+}

@@ -1,0 +1,574 @@
+// Kursify — skema database lengkap
+// Konvensi: uang integer rupiah, semua tanggal DateTime, status berupa string terkontrol Zod.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Setting {
+  id                  Int     @id @default(1)
+  namaLembaga         String  @default("LKP Nida Course")
+  alamat              String? @db.Text
+  telepon             String?
+  email               String?
+  logoPath            String?
+  kodeSiswa           String  @default("KSF")
+  kodeSertifikat      String  @default("LKP.NC")
+  namaDirektur        String  @default("Nida")
+  dendaKeterlambatan  Int     @default(10000)
+  tanggalTagihan      Int     @default(1)
+  tanggalJatuhTempo   Int     @default(10)
+  batasTangguhHari    Int     @default(14)
+  batasPersetujuan    Int     @default(500000)
+  minKehadiran        Int     @default(75)
+  minLulus            Int     @default(70)
+  timezone            String  @default("Asia/Jakarta")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("admin")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tutor     Tutor?
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Student {
+  id             String    @id @default(cuid())
+  studentCode    String?   @unique
+  nama           String
+  noIdentitas    String?
+  tempatLahir    String?
+  tanggalLahir   DateTime?
+  jenisKelamin   String?
+  alamat         String?   @db.Text
+  agama          String?
+  asalInstansi   String?
+  noWa           String
+  email          String?
+  programId      String?
+  namaAyah       String?
+  namaIbu        String?
+  alamatOrtu     String?   @db.Text
+  namaWali       String?
+  noWaWali       String?
+  fotoPath       String?
+  status         String    @default("pending")
+  qrToken        String?   @unique
+  registeredAt   DateTime  @default(now())
+  verifiedAt     DateTime?
+  activatedAt    DateTime?
+  suspendedAt    DateTime?
+  nonActiveReason String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  program     Program?           @relation(fields: [programId], references: [id])
+  documents   StudentDocument[]
+  enrollments Enrollment[]
+  invoices    Invoice[]
+  attendances StudentAttendance[]
+
+  @@index([status])
+  @@map("students")
+}
+
+model StudentDocument {
+  id        String   @id @default(cuid())
+  studentId String
+  jenis     String
+  filePath  String
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("student_documents")
+}
+
+model Tutor {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  tutorCode String   @unique
+  nama      String
+  noWa      String
+  email     String?
+  keahlian  String
+  status    String   @default("aktif")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id])
+  feeSchemes        TutorFeeScheme[]
+  classes           CourseClass[]
+  sessions          Session[]          @relation("SessionTutor")
+  substituteSessions Session[]         @relation("SessionSubstitute")
+  attendances       TutorAttendance[]
+  payrolls          TutorPayroll[]
+
+  @@map("tutors")
+}
+
+model TutorFeeScheme {
+  id           String   @id @default(cuid())
+  tutorId      String
+  skema        String
+  tarif        Int
+  berlakuMulai String
+  setBy        String?
+  createdAt    DateTime @default(now())
+
+  tutor Tutor @relation(fields: [tutorId], references: [id])
+
+  @@unique([tutorId, berlakuMulai])
+  @@map("tutor_fee_schemes")
+}
+
+model Program {
+  id                   String   @id @default(cuid())
+  kode                 String   @unique
+  nama                 String
+  parentId             String?
+  level                String?
+  biayaPendaftaran     Int      @default(0)
+  skemaTagihan         String   @default("spp_bulanan")
+  tarif                Int      @default(0)
+  jumlahPertemuanPaket Int?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  parent   Program?  @relation("ProgramHierarchy", fields: [parentId], references: [id])
+  children Program[] @relation("ProgramHierarchy")
+  materials Material[]
+  classes   CourseClass[]
+  students  Student[]
+
+  @@map("programs")
+}
+
+model Material {
+  id        String   @id @default(cuid())
+  programId String
+  nama      String
+  urutan    Int      @default(1)
+  createdAt DateTime @default(now())
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  grades  Grade[]
+
+  @@map("materials")
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  nama      String   @unique
+  kapasitas Int?
+  createdAt DateTime @default(now())
+
+  classes  CourseClass[]
+  sessions Session[]
+
+  @@map("rooms")
+}
+
+model CourseClass {
+  id             String   @id @default(cuid())
+  kodeKelas      String   @unique
+  programId      String
+  tutorId        String
+  roomId         String
+  jenis          String   @default("reguler")
+  kuota          Int      @default(15)
+  tanggalMulai   DateTime
+  tanggalSelesai DateTime
+  status         String   @default("dibuka")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  program      Program         @relation(fields: [programId], references: [id])
+  tutor        Tutor           @relation(fields: [tutorId], references: [id])
+  room         Room            @relation(fields: [roomId], references: [id])
+  schedules    ClassSchedule[]
+  enrollments  Enrollment[]
+  sessions     Session[]
+
+  @@map("classes")
+}
+
+model ClassSchedule {
+  id         String @id @default(cuid())
+  classId    String
+  hari       Int
+  jamMulai   String
+  jamSelesai String
+  createdAt  DateTime @default(now())
+
+  class CourseClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@map("class_schedules")
+}
+
+model Enrollment {
+  id              String   @id @default(cuid())
+  studentId       String
+  classId         String
+  tanggalMasuk    DateTime @default(now())
+  status          String   @default("aktif")
+  saldoPertemuan  Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  student     Student        @relation(fields: [studentId], references: [id])
+  class       CourseClass    @relation(fields: [classId], references: [id])
+  invoices    Invoice[]
+  grades      Grade[]
+  certificate Certificate?
+
+  @@unique([studentId, classId])
+  @@map("enrollments")
+}
+
+model Session {
+  id                String    @id @default(cuid())
+  classId           String
+  tanggal           DateTime
+  jamMulai          String
+  jamSelesai        String
+  roomId            String
+  tutorId           String
+  penggantiTutorId  String?
+  status            String    @default("terjadwal")
+  replacesSessionId String?   @unique
+  alasanBatal       String?
+  materi            String?
+  locked            Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  class          CourseClass      @relation(fields: [classId], references: [id])
+  room           Room             @relation(fields: [roomId], references: [id])
+  tutor          Tutor            @relation("SessionTutor", fields: [tutorId], references: [id])
+  penggantiTutor Tutor?           @relation("SessionSubstitute", fields: [penggantiTutorId], references: [id])
+  replaces       Session?         @relation("SessionReplacement", fields: [replacesSessionId], references: [id])
+  replacedBy     Session?         @relation("SessionReplacement")
+  attendances    StudentAttendance[]
+  tutorAttendance TutorAttendance?
+  payrollItems   TutorPayrollItem[]
+
+  @@index([tanggal])
+  @@index([classId])
+  @@map("sessions")
+}
+
+model StudentAttendance {
+  id         String   @id @default(cuid())
+  sessionId  String
+  studentId  String
+  status     String
+  metode     String   @default("manual")
+  recordedBy String?
+  recordedAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@unique([sessionId, studentId])
+  @@map("student_attendances")
+}
+
+model TutorAttendance {
+  id        String    @id @default(cuid())
+  sessionId String    @unique
+  tutorId   String
+  status    String    @default("hadir")
+  checkInAt DateTime?
+  savedAt   DateTime?
+  createdAt DateTime  @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tutor   Tutor   @relation(fields: [tutorId], references: [id])
+
+  @@map("tutor_attendances")
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  invoiceNo      String    @unique
+  studentId      String
+  enrollmentId   String?
+  jenis          String
+  periode        String?
+  nominal        Int
+  potongan       Int       @default(0)
+  denda          Int       @default(0)
+  total          Int
+  jatuhTempo     DateTime
+  status         String    @default("belum_dibayar")
+  menunggakSejak DateTime?
+  catatan        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  student     Student     @relation(fields: [studentId], references: [id])
+  enrollment  Enrollment? @relation(fields: [enrollmentId], references: [id])
+  discounts   Discount[]
+  payments    Payment[]
+  reminders   NotificationLog[]
+
+  @@index([studentId, status])
+  @@map("invoices")
+}
+
+model Discount {
+  id         String   @id @default(cuid())
+  invoiceId  String
+  jenis      String
+  nominal    Int
+  alasan     String
+  approvedBy String?
+  createdAt  DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("discounts")
+}
+
+model Payment {
+  id          String    @id @default(cuid())
+  invoiceId   String
+  tanggal     DateTime
+  nominal     Int
+  metode      String
+  noReferensi String?
+  buktiPath   String?
+  receivedBy  String?
+  status      String    @default("valid")
+  voidReason  String?
+  voidBy      String?
+  voidAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id])
+  receipt Receipt?
+
+  @@map("payments")
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  paymentId String   @unique
+  receiptNo String   @unique
+  issuedAt  DateTime @default(now())
+  pdfPath   String?
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+
+  @@map("receipts")
+}
+
+model ExpenseCategory {
+  id       String  @id @default(cuid())
+  nama     String
+  parentId String?
+  createdAt DateTime @default(now())
+
+  parent   ExpenseCategory?  @relation("ExpenseCategoryHierarchy", fields: [parentId], references: [id])
+  children ExpenseCategory[] @relation("ExpenseCategoryHierarchy")
+  expenses Expense[]
+  recurring RecurringExpense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id                String    @id @default(cuid())
+  tanggal           DateTime
+  categoryId        String
+  nominal           Int
+  penerima          String
+  sumberDana        String
+  keterangan        String    @db.Text
+  buktiPath         String?
+  status            String    @default("diajukan")
+  createdBy         String?
+  approvedBy        String?
+  approvedAt        DateTime?
+  paidAt            DateTime?
+  tutorPayrollId    String?   @unique
+  recurringExpenseId String?
+  voidReason        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  category         ExpenseCategory   @relation(fields: [categoryId], references: [id])
+  tutorPayroll     TutorPayroll?     @relation(fields: [tutorPayrollId], references: [id])
+  recurringExpense RecurringExpense? @relation(fields: [recurringExpenseId], references: [id])
+
+  @@index([status, tanggal])
+  @@map("expenses")
+}
+
+model RecurringExpense {
+  id           String   @id @default(cuid())
+  categoryId   String
+  nominal      Int
+  penerima     String
+  sumberDana   String
+  tanggalBayar Int
+  keterangan   String   @db.Text
+  isActive     Boolean  @default(true)
+  lastDraftAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  category ExpenseCategory @relation(fields: [categoryId], references: [id])
+  expenses Expense[]
+
+  @@map("recurring_expenses")
+}
+
+model TutorPayroll {
+  id         String    @id @default(cuid())
+  tutorId    String
+  periode    String
+  skema      String
+  tarif      Int
+  jumlahSesi Int       @default(0)
+  total      Int       @default(0)
+  status     String    @default("draft")
+  slipNo     String?   @unique
+  slipPdfPath String?
+  reviewedAt DateTime?
+  approvedAt DateTime?
+  paidAt     DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tutor  Tutor              @relation(fields: [tutorId], references: [id])
+  items  TutorPayrollItem[]
+  expenses Expense[]
+
+  @@unique([tutorId, periode])
+  @@map("tutor_payrolls")
+}
+
+model TutorPayrollItem {
+  id             String @id @default(cuid())
+  tutorPayrollId String
+  sessionId      String
+
+  tutorPayroll TutorPayroll @relation(fields: [tutorPayrollId], references: [id], onDelete: Cascade)
+  session      Session      @relation(fields: [sessionId], references: [id])
+
+  @@unique([tutorPayrollId, sessionId])
+  @@map("tutor_payroll_items")
+}
+
+model Grade {
+  id          String   @id @default(cuid())
+  enrollmentId String
+  materialId  String
+  nilai       Float
+  tanggalTest DateTime
+  inputBy     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id])
+  material   Material   @relation(fields: [materialId], references: [id])
+
+  @@unique([enrollmentId, materialId])
+  @@map("grades")
+}
+
+model Certificate {
+  id            String   @id @default(cuid())
+  enrollmentId  String   @unique
+  certificateNo String   @unique
+  rataRata      Float
+  huruf         String
+  predikat      String
+  issuedAt      DateTime @default(now())
+  verifyToken   String   @unique
+  pdfPath       String?
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id])
+
+  @@map("certificates")
+}
+
+model CashLedger {
+  id         String   @id @default(cuid())
+  tanggal    DateTime
+  tipe       String
+  akun       String
+  nominal    Int
+  sumberType String
+  sumberId   String
+  keterangan String
+  isReversal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([tanggal, akun])
+  @@map("cash_ledger")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  tableName String
+  recordId  String
+  before    Json?
+  after     Json?
+  reason    String?  @db.Text
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([tableName, recordId])
+  @@map("audit_logs")
+}
+
+model NotificationLog {
+  id         String    @id @default(cuid())
+  tujuan     String
+  channel    String    @default("whatsapp")
+  template   String
+  payload    Json?
+  status     String    @default("terkirim")
+  invoiceId  String?
+  sentAt     DateTime  @default(now())
+
+  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+
+  @@map("notification_logs")
+}
+
+model Counter {
+  id        String @id @default(cuid())
+  key       String
+  tahun     Int
+  bulan     Int    @default(0)
+  nilaiTerakhir Int @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, tahun, bulan])
+  @@map("counters")
+}
